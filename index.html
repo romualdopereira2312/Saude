@@ -806,17 +806,43 @@ function renderExercicios(){
 }
 
 // ===== FOTOS =====
-function previewFoto(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{fotoBase64=e.target.result;document.getElementById('ft-preview').innerHTML=`<img src="${fotoBase64}" alt="preview">`;};reader.readAsDataURL(file);}
+function previewFoto(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      // Comprime: redimensiona para no máximo 700px no maior lado
+      const maxLado=700;
+      let w=img.width,h=img.height;
+      if(w>h&&w>maxLado){h=Math.round(h*maxLado/w);w=maxLado;}
+      else if(h>maxLado){w=Math.round(w*maxLado/h);h=maxLado;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      // JPEG qualidade 0.6 — reduz bastante o tamanho
+      fotoBase64=canvas.toDataURL('image/jpeg',0.6);
+      document.getElementById('ft-preview').innerHTML=`<img src="${fotoBase64}" alt="preview">`;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
 function salvarFoto(){
   const ft={id:Date.now(),data:document.getElementById('ft-data').value||hoje(),cat:document.getElementById('ft-cat').value,peso:parseFloat(document.getElementById('ft-peso').value)||null,obs:document.getElementById('ft-obs').value,img:fotoBase64||null};
   dados.fotos.push(ft);saveDados();renderFotos();
   fotoBase64=null;document.getElementById('ft-preview').innerHTML='';document.getElementById('ft-input').value='';document.getElementById('ft-obs').value='';
   toast('Evolução registrada!');
 }
+function delFoto(id){
+  if(!confirm('Excluir este registro de evolução?'))return;
+  dados.fotos=dados.fotos.filter(f=>f.id!==id);
+  saveDados();renderFotos();toast('Evolução excluída.');
+}
 function renderFotos(){
   const el=document.getElementById('ft-lista');
   if(!dados.fotos.length){el.innerHTML='<div class="empty"><i class="ti ti-photo"></i>Nenhum registro ainda.</div>';return;}
-  el.innerHTML=dados.fotos.slice().reverse().map(f=>`<div class="log-entry"><div style="flex:1"><div class="log-name">${f.cat}</div><div class="log-sub">${fmtData(f.data)}${f.peso?' · '+f.peso+' kg':''}</div>${f.obs?`<div class="log-sub" style="font-style:italic;">${f.obs}</div>`:''}</div>${f.img?`<img src="${f.img}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" alt="foto">`:'<i class="ti ti-photo" style="font-size:24px;color:var(--text3);"></i>'}</div>`).join('');
+  el.innerHTML=dados.fotos.slice().reverse().map(f=>`<div class="log-entry"><div style="flex:1"><div class="log-name">${f.cat}</div><div class="log-sub">${fmtData(f.data)}${f.peso?' · '+f.peso+' kg':''}</div>${f.obs?`<div class="log-sub" style="font-style:italic;">${f.obs}</div>`:''}</div><div style="display:flex;align-items:center;gap:10px;">${f.img?`<img src="${f.img}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);" alt="foto">`:'<i class="ti ti-photo" style="font-size:24px;color:var(--text3);"></i>'}<button onclick="delFoto(${f.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;"><i class="ti ti-trash"></i></button></div></div>`).join('');
 }
 
 // ===== PERFIL =====
