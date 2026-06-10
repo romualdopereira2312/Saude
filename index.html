@@ -252,6 +252,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.5;}
     <div id="bn-imc" class="imc-badge"></div>
   </div>
   <div class="week-row" id="week-row"></div>
+  <div id="dia-aviso" style="display:none;background:var(--green-bg);color:var(--green-text);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:1rem;"></div>
   <div class="metric-grid">
     <div class="metric"><div class="metric-label">Peso</div><div class="metric-val" id="m-peso">—<span class="metric-unit"> kg</span></div><div class="metric-sub" id="m-peso-diff"></div></div>
     <div class="metric"><div class="metric-label">Calorias</div><div class="metric-val" id="m-cal">—<span class="metric-unit"> kcal</span></div><div class="metric-sub" id="m-cal-meta"></div></div>
@@ -439,6 +440,7 @@ let dados = {perfil:{},registros:[],refeicoes:[],exercicios:[],fotos:[]};
 let pinBuffer = '', pinTarget = null, newProfileColor = 0;
 let calChartInst = null, pesoChartInst = null;
 let fotoBase64 = null, syncInterval = null;
+let diaSelecionado = null; // null = hoje
 
 // ===== STORAGE LOCAL =====
 function loadMeta(){try{const s=localStorage.getItem(META_KEY);if(s)meta=JSON.parse(s);}catch(e){}}
@@ -564,6 +566,7 @@ function checkPin(){
 }
 
 function entrarApp(){
+  diaSelecionado=null;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   const ini=currentProfile.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
@@ -659,8 +662,19 @@ function showSection(id,btn){
 function renderDashboard(){
   initWeek();
   const p=dados.perfil;
-  const ultimo=dados.registros[0];
-  const segundo=dados.registros[1];
+  const dSel=diaAtual();
+  const ehHoje=(dSel===hoje());
+  // Mostra um aviso quando está vendo outro dia
+  const aviso=document.getElementById('dia-aviso');
+  if(aviso){
+    if(!ehHoje){aviso.style.display='';aviso.innerHTML='<i class="ti ti-calendar-search"></i> Vendo dados de <strong>'+fmtData(dSel)+'</strong> · <span style="text-decoration:underline;cursor:pointer;" onclick="selecionarDia(hoje())">voltar para hoje</span>';}
+    else aviso.style.display='none';
+  }
+  // Registro do dia selecionado (ou o mais recente se for hoje e não houver registro hoje)
+  const regDia=dados.registros.find(r=>r.data===dSel);
+  const ultimo=regDia||(ehHoje?dados.registros[0]:null);
+  const idxUlt=dados.registros.indexOf(ultimo);
+  const segundo=idxUlt>=0?dados.registros[idxUlt+1]:dados.registros[1];
   if(p.nome){
     document.getElementById('profile-banner').style.display='';
     document.getElementById('bn-nome').textContent=p.nome;
@@ -696,12 +710,12 @@ function renderDashboard(){
       document.getElementById('m-gord-abd').innerHTML=(rOmron.gordAbd||'—')+'<span class="metric-unit"> nív</span>';
     }
   }
-  const rfH=dados.refeicoes.filter(r=>r.data===hoje());
+  const rfH=dados.refeicoes.filter(r=>r.data===dSel);
   const tCal=rfH.reduce((s,r)=>s+r.cal,0),tProt=rfH.reduce((s,r)=>s+r.prot,0),tCarb=rfH.reduce((s,r)=>s+r.carb,0),tFat=rfH.reduce((s,r)=>s+r.fat,0);
   const calMeta=p.calMeta||1600;
   document.getElementById('m-cal').innerHTML=tCal+'<span class="metric-unit"> kcal</span>';
   document.getElementById('m-cal-meta').textContent='meta: '+calMeta+' kcal';
-  const exH=dados.exercicios.filter(e=>e.data===hoje());
+  const exH=dados.exercicios.filter(e=>e.data===dSel);
   document.getElementById('m-ex').innerHTML=exH.reduce((s,e)=>s+e.dur,0)+'<span class="metric-unit"> min</span>';
   document.getElementById('m-ex-kcal').textContent=exH.reduce((s,e)=>s+e.cal,0)?exH.reduce((s,e)=>s+e.cal,0)+' kcal':'nenhum treino';
   const pm=p.sexo==='F'?100:120;
@@ -717,15 +731,25 @@ function renderDashboard(){
 function initWeek(){
   const wrap=document.getElementById('week-row');
   const nomes=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  const hj=hoje();wrap.innerHTML='';
+  const hj=hoje();
+  const diaAtivo=diaSelecionado||hj;
+  wrap.innerHTML='';
   for(let i=6;i>=0;i--){
     const d=new Date();d.setDate(d.getDate()-i);
     const ds=d.toISOString().split('T')[0];
-    const tem=dados.registros.some(r=>r.data===ds);
-    const isH=ds===hj;
-    wrap.innerHTML+=`<div class="week-day${isH?' today':''}"><div class="week-day-name">${nomes[d.getDay()]}</div><div class="week-day-num">${d.getDate()}</div><div class="week-day-dot${tem?' active':''}"></div></div>`;
+    const tem=dados.registros.some(r=>r.data===ds)||dados.refeicoes.some(r=>r.data===ds)||dados.exercicios.some(e=>e.data===ds);
+    const isSel=ds===diaAtivo;
+    wrap.innerHTML+=`<div class="week-day${isSel?' today':''}" style="cursor:pointer;" onclick="selecionarDia('${ds}')"><div class="week-day-name">${nomes[d.getDay()]}</div><div class="week-day-num">${d.getDate()}</div><div class="week-day-dot${tem?' active':''}"></div></div>`;
   }
 }
+
+function selecionarDia(ds){
+  // Se clicar no dia já selecionado (ou hoje), volta para hoje
+  diaSelecionado=(ds===diaSelecionado)?null:ds;
+  renderDashboard();
+}
+
+function diaAtual(){return diaSelecionado||hoje();}
 
 function getCC(){const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;return{grid:dark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)',tick:dark?'#5A5855':'#9A9790'};}
 
@@ -753,7 +777,7 @@ function gerarAnalise(reg,cal,calMeta,nRef){
   if(reg?.agua){if(reg.agua>=2.5)pos.push('Hidratação ótima');else if(reg.agua>=1.5)mel.push('Aumentar hidratação');else alt.push('Baixa hidratação');}
   if(reg?.sono){if(reg.sono>=7)pos.push('Sono adequado');else if(reg.sono>=6)mel.push('Melhorar sono');else alt.push('Sono insuficiente');}
   if(nRef>=4)pos.push('Refeições fracionadas');else if(nRef>0)mel.push('Fracionar mais refeições');
-  if(dados.exercicios.filter(e=>e.data===hoje()).length)pos.push('Treino registrado ✓');
+  if(dados.exercicios.filter(e=>e.data===diaAtual()).length)pos.push('Treino registrado ✓');
   document.getElementById('analise-txt').textContent=txt||'Registre seus dados para receber análise personalizada.';
   const tags=document.getElementById('analise-tags');tags.innerHTML='';
   pos.forEach(t=>tags.innerHTML+=`<span class="tag tag-green"><i class="ti ti-check"></i>${t}</span>`);
